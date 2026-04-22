@@ -41,11 +41,11 @@ function createAutocomplete(container, opts = {}) {
   input.type = "search";
   input.className = "ac-input";
   input.placeholder = placeholder;
-  // iOS ignores autocomplete="off" for name-like fields and shows the
-  // AutoFill Contact bar. "new-password" suppresses it on iOS without
-  // triggering Chrome's password manager on desktop.
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  input.setAttribute("autocomplete", isIOS ? "new-password" : "off");
+  // Safari (macOS + iOS) ignores autocomplete="off" for name-like fields
+  // and offers Contacts autofill. "new-password" suppresses it on all
+  // Safari without triggering Chrome/Firefox's password manager.
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  input.setAttribute("autocomplete", isSafari ? "new-password" : "off");
   input.setAttribute("autocorrect", "off");
   input.setAttribute("autocapitalize", "off");
   input.spellcheck = false;
