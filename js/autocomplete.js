@@ -41,7 +41,11 @@ function createAutocomplete(container, opts = {}) {
   input.type = "search";
   input.className = "ac-input";
   input.placeholder = placeholder;
-  input.autocomplete = "off";
+  // "new-password" is the most reliable way to suppress iOS AutoFill Contact —
+  // iOS never offers contact suggestions on inputs with this autocomplete value.
+  input.setAttribute("autocomplete", "new-password");
+  input.setAttribute("autocorrect", "off");
+  input.setAttribute("autocapitalize", "off");
   input.spellcheck = false;
   if (inputId) input.id = inputId;
 
