@@ -5,7 +5,7 @@
 // This must match the value in app.js.
 // =============================================================================
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzjNKZozzfSg012TZDjJKggxgRl6JOSjROYtQXQI41IGYzBklNIzHXTzGhPWnZ_7qsFRQ/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzmYywPG0sEYaoEOY2uD0Y8VvB7Gpm9cTcVNNCWDL2ikhW8NXecBNU9fiEIB0YYPn6mUA/exec";
 
 // Superlative ID → object lookup (built from superlatives.js).
 const SUP_MAP = {};

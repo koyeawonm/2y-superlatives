@@ -2,43 +2,44 @@
 // 2Y Send-Off Superlatives — Google Apps Script Backend
 // =============================================================================
 // Deploy as: Execute as → Me | Who has access → Anyone
-// After deploying, copy the Web App URL into js/app.js and js/admin.js.
+// After editing this file, ALWAYS create a New Deployment — Apps Script serves
+// the last deployed version, not the saved file.
 // =============================================================================
 
 // ── CONFIGURE THESE BEFORE DEPLOYING ─────────────────────────────────────────
 
-// Admin dashboard password. Never expose this in client code — the client
-// sends a plaintext password attempt here and this script validates it.
-const ADMIN_PASSWORD = "2Y2026!";
+var ADMIN_PASSWORD = "2Y2026!";
 
-// Voting deadline: April 30, 2026 at 11:59pm ET (UTC-4 in April = 03:59 UTC May 1).
-// Stored as a Unix timestamp in milliseconds.
-const VOTING_DEADLINE_MS = new Date("2026-05-01T03:59:00Z").getTime();
+// April 30 2026 11:59 PM Eastern = May 1 2026 03:59:00 UTC
+// Using Date.UTC() avoids ISO string parsing quirks across runtimes.
+var VOTING_DEADLINE_MS = Date.UTC(2026, 4, 1, 3, 59, 0); // month is 0-indexed
 
-// Sheet tab names — must match exactly.
-const SUBMISSIONS_SHEET = "submissions";
-const VOTES_SHEET       = "votes";
+// Sheet tab names — must match exactly (lowercase, no spaces).
+var SUBMISSIONS_SHEET = "submissions";
+var VOTES_SHEET       = "votes";
 
 // =============================================================================
 // ENTRY POINT
 // =============================================================================
 
-/**
- * Main entry point for all HTTP POST requests.
- * Returns JSON via ContentService (handles CORS for browser fetch calls).
- */
 function doPost(e) {
   try {
-    const body   = JSON.parse(e.postData.contents);
-    const action = body.action;
+    if (!e || !e.postData || !e.postData.contents) {
+      return respond({ ok: false, error: "Empty request body." });
+    }
 
-    let result;
-    switch (action) {
-      case "submit_ballot": result = handleSubmitBallot(body); break;
-      case "admin_stats":   result = handleAdminStats(body);   break;
-      case "admin_export":  result = handleAdminExport(body);  break;
-      default:
-        result = { ok: false, error: "Unknown action: " + action };
+    var body   = JSON.parse(e.postData.contents);
+    var action = body.action;
+
+    var result;
+    if (action === "submit_ballot") {
+      result = handleSubmitBallot(body);
+    } else if (action === "admin_stats") {
+      result = handleAdminStats(body);
+    } else if (action === "admin_export") {
+      result = handleAdminExport(body);
+    } else {
+      result = { ok: false, error: "Unknown action: " + action };
     }
 
     return respond(result);
@@ -47,6 +48,7 @@ function doPost(e) {
   }
 }
 
+// GET handler — lets you test the URL in a browser to confirm it's deployed.
 function doGet(e) {
   return respond({ ok: true, message: "2Y Superlatives API is running." });
 }
@@ -55,37 +57,28 @@ function doGet(e) {
 // HANDLERS
 // =============================================================================
 
-/**
- * submit_ballot
- * No authentication — duplicate prevention is client-side (localStorage).
- * Server only enforces the voting deadline.
- *
- * Body: { action, votes: [{ categoryId, nomineeName, isWriteIn }] }
- *       Duo: [{ categoryId, nomineeName1, nomineeName2, isWriteIn }]
- * Returns: { ok }
- */
 function handleSubmitBallot(body) {
   // Server-side deadline check.
   if (Date.now() > VOTING_DEADLINE_MS) {
     return { ok: false, error: "Voting has closed." };
   }
 
-  const votes = body.votes;
-  if (!Array.isArray(votes) || votes.length === 0) {
+  var votes = body.votes;
+  if (!votes || !votes.length) {
     return { ok: false, error: "No votes provided." };
   }
 
   // Generate a random UUID as ballot_id.
-  // This lives only in the votes sheet — it is never written to submissions.
-  const ballotId = generateUUID();
+  // This lives ONLY in the votes sheet — never written to submissions.
+  var ballotId = generateUUID();
 
-  // Build vote rows. Each "single" vote = one row. Each "duo" = two rows.
-  const voteRows = [];
-  for (const vote of votes) {
+  // Build vote rows. Each single vote = 1 row. Each duo = 2 rows.
+  var voteRows = [];
+  for (var i = 0; i < votes.length; i++) {
+    var vote = votes[i];
     if (!vote.categoryId) continue;
 
     if (vote.nomineeName1 && vote.nomineeName2) {
-      // Duo — two rows under the same ballotId.
       voteRows.push([ballotId, vote.categoryId, vote.nomineeName1, vote.isWriteIn ? "TRUE" : "FALSE"]);
       voteRows.push([ballotId, vote.categoryId, vote.nomineeName2, vote.isWriteIn ? "TRUE" : "FALSE"]);
     } else if (vote.nomineeName) {
@@ -93,94 +86,74 @@ function handleSubmitBallot(body) {
     }
   }
 
-  if (voteRows.length === 0) {
+  if (!voteRows.length) {
     return { ok: false, error: "No valid votes found." };
   }
 
-  // CRITICAL: Shuffle vote rows before writing.
-  // Without this, row order in the votes sheet would correlate with submission
-  // time, making it possible to link a submission to its ballot via timing.
+  // CRITICAL: Shuffle vote rows before writing so row order doesn't reveal
+  // submission order, which would allow de-anonymization via timing.
   shuffleArray(voteRows);
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Write vote rows to votes sheet. No timestamp stored here.
-  const votesSheet = ss.getSheetByName(VOTES_SHEET);
-  if (!votesSheet) throw new Error("Sheet '" + VOTES_SHEET + "' not found.");
-  const lastVoteRow = votesSheet.getLastRow();
+  // Write votes (no timestamp here).
+  var votesSheet = ss.getSheetByName(VOTES_SHEET);
+  if (!votesSheet) return { ok: false, error: "Sheet '" + VOTES_SHEET + "' not found. Check tab name." };
+  var lastVoteRow = votesSheet.getLastRow();
   votesSheet.getRange(lastVoteRow + 1, 1, voteRows.length, 4).setValues(voteRows);
 
-  // Append a single timestamp row to submissions sheet.
-  // The submissions sheet has no ballot_id — there is no link between the two
-  // sheets. It exists only to count total ballots submitted.
-  const submissionsSheet = ss.getSheetByName(SUBMISSIONS_SHEET);
-  if (!submissionsSheet) throw new Error("Sheet '" + SUBMISSIONS_SHEET + "' not found.");
+  // Append one timestamp to submissions sheet.
+  // No ballot_id here — there is no link between submissions and votes.
+  var submissionsSheet = ss.getSheetByName(SUBMISSIONS_SHEET);
+  if (!submissionsSheet) return { ok: false, error: "Sheet '" + SUBMISSIONS_SHEET + "' not found. Check tab name." };
   submissionsSheet.appendRow([new Date().toISOString()]);
 
   return { ok: true };
 }
 
-/**
- * admin_stats
- * Returns summary stats and per-category top nominees.
- * Body: { action, password }
- * Returns: { ok, totalBallots, totalEligible, percentVoted, votingOpen, deadlineISO, categories }
- */
 function handleAdminStats(body) {
-  if (!validateAdminPassword(body.password)) return adminAuthError();
+  if (body.password !== ADMIN_PASSWORD) return { ok: false, error: "Invalid admin password." };
 
-  const ss              = SpreadsheetApp.getActiveSpreadsheet();
-  const submissionsSheet = ss.getSheetByName(SUBMISSIONS_SHEET);
-  const votesSheet       = ss.getSheetByName(VOTES_SHEET);
+  var ss              = SpreadsheetApp.getActiveSpreadsheet();
+  var submissionsSheet = ss.getSheetByName(SUBMISSIONS_SHEET);
+  var votesSheet       = ss.getSheetByName(VOTES_SHEET);
 
-  // Total ballots = row count of submissions sheet minus the header row.
-  const totalBallots  = Math.max(0, submissionsSheet.getLastRow() - 1);
-  const totalEligible = 75; // Hardcoded class size.
-
-  // Load all vote rows and tally.
-  const allVoteRows      = getSheetData(votesSheet);
-  const categoryTallies  = buildCategoryTallies(allVoteRows);
-
-  const votingOpen  = Date.now() < VOTING_DEADLINE_MS;
-  const deadlineISO = new Date(VOTING_DEADLINE_MS).toISOString();
+  var totalBallots  = submissionsSheet ? Math.max(0, submissionsSheet.getLastRow() - 1) : 0;
+  var totalEligible = 75;
+  var allVoteRows   = getSheetData(votesSheet);
+  var tallies       = buildCategoryTallies(allVoteRows);
 
   return {
-    ok: true,
-    totalBallots,
-    totalEligible,
+    ok:           true,
+    totalBallots: totalBallots,
+    totalEligible: totalEligible,
     percentVoted: totalEligible > 0 ? Math.round((totalBallots / totalEligible) * 100) : 0,
-    votingOpen,
-    deadlineISO,
-    categories: categoryTallies,
+    votingOpen:   Date.now() < VOTING_DEADLINE_MS,
+    deadlineISO:  new Date(VOTING_DEADLINE_MS).toISOString(),
+    categories:   tallies,
   };
 }
 
-/**
- * admin_export
- * Returns CSV-ready tallies (category, rank, nominee, votes, is_write_in).
- * Does NOT export submission timestamps or any identifying data.
- * Body: { action, password }
- * Returns: { ok, csv }
- */
 function handleAdminExport(body) {
-  if (!validateAdminPassword(body.password)) return adminAuthError();
+  if (body.password !== ADMIN_PASSWORD) return { ok: false, error: "Invalid admin password." };
 
-  const ss         = SpreadsheetApp.getActiveSpreadsheet();
-  const votesSheet = ss.getSheetByName(VOTES_SHEET);
-  const allVoteRows = getSheetData(votesSheet);
-  const tallies     = buildCategoryTallies(allVoteRows);
+  var ss        = SpreadsheetApp.getActiveSpreadsheet();
+  var votesSheet = ss.getSheetByName(VOTES_SHEET);
+  var tallies    = buildCategoryTallies(getSheetData(votesSheet));
 
-  const lines = ["category_id,rank,nominee_name,votes,is_write_in"];
-  for (const cat of tallies) {
-    cat.topNominees.forEach((nominee, idx) => {
+  var lines = ["category_id,rank,nominee_name,votes,is_write_in"];
+  for (var i = 0; i < tallies.length; i++) {
+    var cat = tallies[i];
+    for (var j = 0; j < cat.topNominees.length; j++) {
+      var nominee = cat.topNominees[j];
       lines.push([
         csvEscape(cat.categoryId),
-        idx + 1,
+        j + 1,
         csvEscape(nominee.name),
         nominee.votes,
         nominee.isWriteIn ? "TRUE" : "FALSE",
       ].join(","));
-    });
+    }
   }
 
   return { ok: true, csv: lines.join("\n") };
@@ -190,69 +163,56 @@ function handleAdminExport(body) {
 // HELPERS
 // =============================================================================
 
-/**
- * Read all data rows from a sheet, returning objects keyed by the header row.
- * Assumes row 0 is the header.
- */
 function getSheetData(sheet) {
   if (!sheet || sheet.getLastRow() < 2) return [];
-
-  const data    = sheet.getDataRange().getValues();
-  const headers = data[0].map(h => h.toString().trim());
-  const rows    = [];
-
-  for (let i = 1; i < data.length; i++) {
-    const row = {};
-    headers.forEach((h, j) => { row[h] = data[i][j]; });
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0].map(function(h) { return h.toString().trim(); });
+  var rows    = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = {};
+    for (var j = 0; j < headers.length; j++) {
+      row[headers[j]] = data[i][j];
+    }
     rows.push(row);
   }
   return rows;
 }
 
-/**
- * Build per-category tallies from raw vote rows.
- * For duo categories, pairs are counted as order-agnostic sets:
- * "Tome + Koy" and "Koy + Tome" count as the same pair.
- */
 function buildCategoryTallies(voteRows) {
-  const byCategory = {};
-  for (const row of voteRows) {
-    const catId     = row["category_id"] || row[1];
-    const name      = row["nominee_name"] || row[2];
-    const isWriteIn = (row["is_write_in"] || row[3] || "").toString().toUpperCase() === "TRUE";
+  var byCategory    = {};
+  var ballotCatGroups = {};
+
+  for (var i = 0; i < voteRows.length; i++) {
+    var row      = voteRows[i];
+    var ballotId = row["ballot_id"]    || "";
+    var catId    = row["category_id"]  || "";
+    var name     = row["nominee_name"] || "";
+    var isWriteIn = (row["is_write_in"] || "").toString().toUpperCase() === "TRUE";
 
     if (!catId || !name) continue;
 
-    if (!byCategory[catId]) byCategory[catId] = { single: {} };
-    if (!byCategory[catId].single[name]) {
-      byCategory[catId].single[name] = { votes: 0, isWriteIn };
+    // Single-nominee tallies.
+    if (!byCategory[catId]) byCategory[catId] = {};
+    if (!byCategory[catId][name]) byCategory[catId][name] = { votes: 0, isWriteIn: isWriteIn };
+    byCategory[catId][name].votes++;
+
+    // Duo pair detection: group by (ballot_id, category_id).
+    if (ballotId) {
+      var key = ballotId + "||" + catId;
+      if (!ballotCatGroups[key]) ballotCatGroups[key] = { catId: catId, names: [], isWriteIn: isWriteIn };
+      ballotCatGroups[key].names.push(name);
     }
-    byCategory[catId].single[name].votes++;
   }
 
-  // Detect duo categories: any (ballot_id, category_id) group with 2 names.
-  const duoCats        = new Set();
-  const ballotCatGroups = {};
-  for (const row of voteRows) {
-    const ballotId  = row["ballot_id"] || row[0];
-    const catId     = row["category_id"] || row[1];
-    const name      = row["nominee_name"] || row[2];
-    const isWriteIn = (row["is_write_in"] || row[3] || "").toString().toUpperCase() === "TRUE";
-
-    if (!ballotId || !catId || !name) continue;
-
-    const key = ballotId + "||" + catId;
-    if (!ballotCatGroups[key]) ballotCatGroups[key] = { catId, names: [], isWriteIn };
-    ballotCatGroups[key].names.push(name);
-  }
-
-  const duoTallies = {};
-  for (const key of Object.keys(ballotCatGroups)) {
-    const group = ballotCatGroups[key];
+  // Build duo tallies for (ballot_id, category_id) groups with exactly 2 names.
+  var duoCats    = {};
+  var duoTallies = {};
+  var keys = Object.keys(ballotCatGroups);
+  for (var k = 0; k < keys.length; k++) {
+    var group = ballotCatGroups[keys[k]];
     if (group.names.length === 2) {
-      duoCats.add(group.catId);
-      // Normalize pair order so (A,B) === (B,A).
-      const pairKey = group.names.slice().sort().join(" + ");
+      duoCats[group.catId] = true;
+      var pairKey = group.names.slice().sort().join(" + ");
       if (!duoTallies[group.catId]) duoTallies[group.catId] = {};
       if (!duoTallies[group.catId][pairKey]) {
         duoTallies[group.catId][pairKey] = { votes: 0, isWriteIn: group.isWriteIn };
@@ -261,63 +221,58 @@ function buildCategoryTallies(voteRows) {
     }
   }
 
-  const allCatIds = [...new Set(voteRows.map(r => r["category_id"] || r[1]).filter(Boolean))];
-  return allCatIds.map(catId => {
-    const isDuo = duoCats.has(catId);
-    let topNominees;
+  // Build result array — one entry per category.
+  var seen    = {};
+  var catIds  = [];
+  for (var r = 0; r < voteRows.length; r++) {
+    var cid = voteRows[r]["category_id"] || "";
+    if (cid && !seen[cid]) { seen[cid] = true; catIds.push(cid); }
+  }
+
+  return catIds.map(function(catId) {
+    var isDuo = !!duoCats[catId];
+    var topNominees;
 
     if (isDuo && duoTallies[catId]) {
-      topNominees = Object.entries(duoTallies[catId])
-        .map(([name, { votes, isWriteIn }]) => ({ name, votes, isWriteIn }))
-        .sort((a, b) => b.votes - a.votes);
+      topNominees = Object.keys(duoTallies[catId]).map(function(pairKey) {
+        return { name: pairKey, votes: duoTallies[catId][pairKey].votes, isWriteIn: duoTallies[catId][pairKey].isWriteIn };
+      });
     } else {
-      const nominees = byCategory[catId] ? byCategory[catId].single : {};
-      topNominees = Object.entries(nominees)
-        .map(([name, { votes, isWriteIn }]) => ({ name, votes, isWriteIn }))
-        .sort((a, b) => b.votes - a.votes);
+      var nominees = byCategory[catId] || {};
+      topNominees = Object.keys(nominees).map(function(name) {
+        return { name: name, votes: nominees[name].votes, isWriteIn: nominees[name].isWriteIn };
+      });
     }
+
+    topNominees.sort(function(a, b) { return b.votes - a.votes; });
 
     return {
       categoryId:  catId,
-      isDuo,
-      totalVotes:  topNominees.reduce((s, n) => s + n.votes, 0),
-      topNominees, // All nominees — client limits display to top 3.
+      isDuo:       isDuo,
+      totalVotes:  topNominees.reduce(function(s, n) { return s + n.votes; }, 0),
+      topNominees: topNominees,
     };
   });
 }
 
-/**
- * Fisher-Yates shuffle — mutates the array in place.
- */
 function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
   }
 }
 
-/**
- * Generate a version-4 UUID.
- */
 function generateUUID() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    const v = c === "x" ? r : (r & 0x3 | 0x8);
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0;
+    var v = c === "x" ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
 }
 
-function validateAdminPassword(password) {
-  return password === ADMIN_PASSWORD;
-}
-
-function adminAuthError() {
-  return { ok: false, error: "Invalid admin password." };
-}
-
 function csvEscape(val) {
-  const s = String(val ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+  var s = String(val === null || val === undefined ? "" : val);
+  if (s.indexOf(",") !== -1 || s.indexOf('"') !== -1 || s.indexOf("\n") !== -1) {
     return '"' + s.replace(/"/g, '""') + '"';
   }
   return s;

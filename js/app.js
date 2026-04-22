@@ -4,7 +4,7 @@
 // Set APPS_SCRIPT_URL to your deployed Apps Script web app URL.
 // =============================================================================
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzjNKZozzfSg012TZDjJKggxgRl6JOSjROYtQXQI41IGYzBklNIzHXTzGhPWnZ_7qsFRQ/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzmYywPG0sEYaoEOY2uD0Y8VvB7Gpm9cTcVNNCWDL2ikhW8NXecBNU9fiEIB0YYPn6mUA/exec";
 
 // Voting closes April 30, 2026 at 11:59pm ET (UTC-4 in April).
 const VOTING_DEADLINE = new Date("2026-05-01T03:59:00Z");
