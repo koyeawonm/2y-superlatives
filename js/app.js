@@ -328,9 +328,12 @@ async function submitBallot() {
 }
 
 function showError(msg) {
-  // Surface errors in the modal area since the landing error div is gone.
-  // Re-open the modal with an error message, or fall back to alert.
-  alert(msg);
+  const el = document.getElementById("submit-error");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = "block";
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  setTimeout(() => { el.style.display = "none"; }, 8000);
 }
 
 // ── LocalStorage draft ────────────────────────────────────────────────────────
@@ -350,15 +353,24 @@ function loadDraftFromStorage() {
 
 async function apiFetch(body) {
   // Apps Script can't respond to CORS preflight (OPTIONS), which is triggered
-  // by Content-Type: application/json. Using text/plain makes it a "simple
-  // request" with no preflight. e.postData.contents still gets the JSON string.
+  // by Content-Type: application/json. Using text/plain avoids the preflight —
+  // it's a "simple request" so the browser sends it directly. Apps Script's
+  // e.postData.contents still receives the JSON string unchanged.
   const res = await fetch(APPS_SCRIPT_URL, {
-    method:  "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body:    JSON.stringify(body),
+    method:   "POST",
+    headers:  { "Content-Type": "text/plain;charset=utf-8" },
+    body:     JSON.stringify(body),
+    redirect: "follow",
   });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+  // Apps Script follows a redirect chain; parse the body regardless of status
+  // code so we surface the server's own error message when possible.
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    console.error("Apps Script response (non-JSON):", res.status, text);
+    throw new Error("Unexpected response from server (status " + res.status + ")");
+  }
 }
 
 function isVotingClosed() {
