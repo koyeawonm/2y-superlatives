@@ -349,9 +349,12 @@ function loadDraftFromStorage() {
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 async function apiFetch(body) {
+  // Apps Script can't respond to CORS preflight (OPTIONS), which is triggered
+  // by Content-Type: application/json. Using text/plain makes it a "simple
+  // request" with no preflight. e.postData.contents still gets the JSON string.
   const res = await fetch(APPS_SCRIPT_URL, {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
     body:    JSON.stringify(body),
   });
   if (!res.ok) throw new Error("HTTP " + res.status);

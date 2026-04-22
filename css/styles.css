@@ -251,7 +251,6 @@ input, button { font-size: 1rem; }
 
 #view-loading {
   min-height: 60vh;
-  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -275,7 +274,6 @@ input, button { font-size: 1rem; }
 
 #view-already-voted {
   min-height: 60vh;
-  display: flex;
   align-items: center;
   justify-content: center;
 }
@@ -307,7 +305,6 @@ input, button { font-size: 1rem; }
 
 #view-closed {
   min-height: 60vh;
-  display: flex;
   align-items: center;
   justify-content: center;
 }
@@ -476,7 +473,6 @@ input, button { font-size: 1rem; }
 
 #view-confirmation {
   min-height: 80vh;
-  display: flex;
   align-items: center;
   justify-content: center;
 }

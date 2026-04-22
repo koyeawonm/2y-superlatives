@@ -259,9 +259,10 @@ async function exportCSV() {
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 async function apiFetch(body) {
+  // text/plain avoids CORS preflight that Apps Script can't handle.
   const res = await fetch(APPS_SCRIPT_URL, {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
     body:    JSON.stringify(body),
   });
   if (!res.ok) throw new Error("HTTP " + res.status);
