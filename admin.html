@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — 2Y Superlatives</title>
+  <meta name="robots" content="noindex, nofollow" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="admin-page">
+
+  <!-- ── Admin header ── -->
+  <header class="admin-header">
+    <div class="container">
+      <div>
+        <div class="admin-header__title">2Y Superlatives — Admin</div>
+        <div class="admin-header__sub">Wharton Class of 2026</div>
+      </div>
+      <div class="admin-header-actions" id="header-actions" style="display:none">
+        <button class="admin-btn admin-btn--ghost" id="refresh-btn">↻ Refresh</button>
+        <button class="admin-btn admin-btn--gold"  id="export-btn">Export CSV</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loading-indicator">
+    <div class="spinner"></div>
+    <span style="color:var(--ink-light);font-size:.9rem">Loading…</span>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       Login view
+       ════════════════════════════════════════ -->
+  <div id="login-view">
+    <div class="container">
+      <div class="login-card" style="margin:0 auto">
+        <div class="login-card__emoji">🔐</div>
+        <h1 class="login-card__title">Admin Access</h1>
+        <form class="pw-form" id="password-form" autocomplete="off">
+          <input
+            type="password"
+            class="pw-input"
+            id="password-input"
+            placeholder="Password"
+            autocomplete="current-password"
+            required
+          />
+          <p id="pw-error"></p>
+          <button type="submit" class="pw-submit">Enter</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       Dashboard view
+       ════════════════════════════════════════ -->
+  <div id="dashboard-view" style="display:none">
+    <div class="container">
+
+      <!-- Summary stats -->
+      <section class="admin-section">
+        <h2 class="admin-section__title">Summary</h2>
+
+        <div class="stats-grid">
+          <div class="stat-card stat-card--ballot">
+            <div class="stat-card__number">
+              <span id="stat-ballots">—</span><span class="stat-card__of"> of 75</span>
+            </div>
+            <div class="stat-card__label">ballots submitted</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__number" id="stat-percent">—</div>
+            <div class="stat-card__label">response rate</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card__label" style="margin-bottom:.5rem">Voting status</div>
+            <span class="status-badge" id="voting-status">—</span>
+          </div>
+        </div>
+
+        <!-- Insights bar — rendered by admin.js once data loads -->
+        <div class="insights-bar" id="insights-bar" style="display:none">
+          <div class="insight-item">
+            <span class="insight-item__label">Most voted</span>
+            <span class="insight-item__value" id="insight-most-voted">—</span>
+          </div>
+          <div class="insight-item insight-item--divider">
+            <span class="insight-item__label">Most skipped</span>
+            <span class="insight-item__value" id="insight-most-skipped">—</span>
+          </div>
+          <div class="insight-item insight-item--divider">
+            <span class="insight-item__label">Write-in votes</span>
+            <span class="insight-item__value" id="insight-writeins">—</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Per-category results -->
+      <section class="admin-section">
+        <h2 class="admin-section__title">Results by Category</h2>
+        <div id="categories-container">
+          <p class="admin-empty">Loading…</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Scripts — superlatives.js must load before admin.js -->
+  <script src="js/superlatives.js"></script>
+  <script src="js/admin.js"></script>
+
+  <script>
+    // Show header action buttons once logged in.
+    document.addEventListener("DOMContentLoaded", () => {
+      const observer = new MutationObserver(() => {
+        const visible = document.getElementById("dashboard-view")?.style.display !== "none";
+        document.getElementById("header-actions").style.display = visible ? "flex" : "none";
+      });
+      const dash = document.getElementById("dashboard-view");
+      if (dash) observer.observe(dash, { attributes: true, attributeFilter: ["style"] });
+    });
+  </script>
+</body>
+</html>

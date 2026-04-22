@@ -1,0 +1,363 @@
+// =============================================================================
+// app.js — Main ballot logic
+// =============================================================================
+// Set APPS_SCRIPT_URL to your deployed Apps Script web app URL.
+// =============================================================================
+
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzjNKZozzfSg012TZDjJKggxgRl6JOSjROYtQXQI41IGYzBklNIzHXTzGhPWnZ_7qsFRQ/exec";
+
+// Voting closes April 30, 2026 at 11:59pm ET (UTC-4 in April).
+const VOTING_DEADLINE = new Date("2026-05-01T03:59:00Z");
+
+// localStorage keys.
+const LS_DRAFT     = "superlatives_draft";
+const LS_SUBMITTED = "ballot_submitted";
+
+// ── State ──────────────────────────────────────────────────────────────────────
+
+let _votes         = {}; // { [superlativeId]: { nomineeName, isWriteIn } | { nomineeName1, nomineeName2, isWriteIn } }
+let _autocompletes = {}; // { [superlativeId]: autocomplete instance(s) }
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Closed state takes priority over everything.
+  if (isVotingClosed()) {
+    showView("closed");
+    return;
+  }
+
+  // Already submitted on this device — show the done screen.
+  if (localStorage.getItem(LS_SUBMITTED) === "true") {
+    showView("already-voted");
+    return;
+  }
+
+  // Otherwise show the landing page.
+  showView("landing");
+
+  document.getElementById("start-voting-btn").addEventListener("click", () => {
+    loadDraftFromStorage();
+    renderBallot();
+    showView("ballot");
+  });
+
+  // Submit modal listeners.
+  document.getElementById("submit-btn").addEventListener("click", openConfirmModal);
+  document.getElementById("confirm-submit-btn").addEventListener("click", submitBallot);
+  document.getElementById("cancel-submit-btn").addEventListener("click", closeConfirmModal);
+  document.getElementById("confirm-modal").addEventListener("click", e => {
+    if (e.target === document.getElementById("confirm-modal")) closeConfirmModal();
+  });
+});
+
+// ── Views ──────────────────────────────────────────────────────────────────────
+
+function showView(name) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("view--active"));
+  const el = document.getElementById("view-" + name);
+  if (el) el.classList.add("view--active");
+}
+
+// ── Ballot rendering ──────────────────────────────────────────────────────────
+
+function renderBallot() {
+  const container = document.getElementById("ballot-cards");
+  container.innerHTML = "";
+  _autocompletes = {};
+
+  SUPERLATIVES.forEach((sup, idx) => {
+    const card = document.createElement("div");
+    card.className = "ballot-card";
+    card.id = "card-" + sup.id;
+    card.dataset.id = sup.id;
+
+    const num = document.createElement("div");
+    num.className = "ballot-card__num";
+    num.textContent = idx + 1;
+
+    const body = document.createElement("div");
+    body.className = "ballot-card__body";
+
+    const title = document.createElement("h3");
+    title.className = "ballot-card__title";
+    title.textContent = sup.title;
+
+    const desc = document.createElement("p");
+    desc.className = "ballot-card__desc";
+    desc.textContent = sup.description;
+
+    const fields = document.createElement("div");
+    fields.className = "ballot-card__fields";
+
+    body.appendChild(title);
+    body.appendChild(desc);
+    body.appendChild(fields);
+    card.appendChild(num);
+    card.appendChild(body);
+    container.appendChild(card);
+
+    const saved = _votes[sup.id];
+
+    if (sup.type === "duo") {
+      _autocompletes[sup.id] = { person1: null, person2: null };
+
+      const wrap1 = document.createElement("div");
+      wrap1.className = "ballot-card__ac";
+      const wrap2 = document.createElement("div");
+      wrap2.className = "ballot-card__ac";
+
+      const ac1 = createAutocomplete(wrap1, {
+        label: "Person 1",
+        placeholder: "Start typing…",
+        inputId: sup.id + "_1",
+        onSelect: (val) => {
+          _votes[sup.id] = { ..._votes[sup.id], nomineeName1: val.name, isWriteIn: val.isWriteIn };
+          saveDraftToStorage();
+          updateCardState(card, sup);
+          updateProgress();
+          updateSubmitButton();
+        },
+        onClear: () => {
+          if (_votes[sup.id]) delete _votes[sup.id].nomineeName1;
+          if (!_votes[sup.id]?.nomineeName1 && !_votes[sup.id]?.nomineeName2) delete _votes[sup.id];
+          saveDraftToStorage();
+          updateCardState(card, sup);
+          updateProgress();
+          updateSubmitButton();
+        },
+      });
+
+      const ac2 = createAutocomplete(wrap2, {
+        label: "Person 2",
+        placeholder: "Start typing…",
+        inputId: sup.id + "_2",
+        onSelect: (val) => {
+          _votes[sup.id] = { ..._votes[sup.id], nomineeName2: val.name, isWriteIn: val.isWriteIn };
+          saveDraftToStorage();
+          updateCardState(card, sup);
+          updateProgress();
+          updateSubmitButton();
+        },
+        onClear: () => {
+          if (_votes[sup.id]) delete _votes[sup.id].nomineeName2;
+          if (!_votes[sup.id]?.nomineeName1 && !_votes[sup.id]?.nomineeName2) delete _votes[sup.id];
+          saveDraftToStorage();
+          updateCardState(card, sup);
+          updateProgress();
+          updateSubmitButton();
+        },
+      });
+
+      _autocompletes[sup.id].person1 = ac1;
+      _autocompletes[sup.id].person2 = ac2;
+
+      if (saved?.nomineeName1) ac1.setValue(saved.nomineeName1, saved.isWriteIn);
+      if (saved?.nomineeName2) ac2.setValue(saved.nomineeName2, saved.isWriteIn);
+
+      fields.appendChild(wrap1);
+      fields.appendChild(wrap2);
+    } else {
+      const wrap = document.createElement("div");
+      wrap.className = "ballot-card__ac";
+
+      const ac = createAutocomplete(wrap, {
+        placeholder: "Start typing a name…",
+        inputId: sup.id,
+        onSelect: (val) => {
+          _votes[sup.id] = { nomineeName: val.name, isWriteIn: val.isWriteIn };
+          saveDraftToStorage();
+          updateCardState(card, sup);
+          updateProgress();
+          updateSubmitButton();
+          scrollToNextCard(sup.id);
+        },
+        onClear: () => {
+          delete _votes[sup.id];
+          saveDraftToStorage();
+          updateCardState(card, sup);
+          updateProgress();
+          updateSubmitButton();
+        },
+      });
+
+      _autocompletes[sup.id] = ac;
+
+      if (saved?.nomineeName) ac.setValue(saved.nomineeName, saved.isWriteIn);
+
+      fields.appendChild(wrap);
+    }
+
+    updateCardState(card, sup);
+  });
+
+  updateProgress();
+  updateSubmitButton();
+}
+
+function updateCardState(card, sup) {
+  const vote = _votes[sup.id];
+  const filled = sup.type === "duo"
+    ? !!(vote?.nomineeName1 && vote?.nomineeName2)
+    : !!vote?.nomineeName;
+  card.classList.toggle("ballot-card--filled", filled);
+}
+
+function scrollToNextCard(currentId) {
+  const currentIndex = SUPERLATIVES.findIndex(s => s.id === currentId);
+  for (let i = currentIndex + 1; i < SUPERLATIVES.length; i++) {
+    const next = SUPERLATIVES[i];
+    if (!_votes[next.id]) {
+      const nextCard = document.getElementById("card-" + next.id);
+      if (nextCard) {
+        setTimeout(() => {
+          nextCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 80);
+      }
+      return;
+    }
+  }
+}
+
+// ── Progress ──────────────────────────────────────────────────────────────────
+
+function updateProgress() {
+  const filled = countFilledVotes();
+  const total  = SUPERLATIVES.length;
+  const bar    = document.getElementById("progress-bar-fill");
+  const label  = document.getElementById("progress-label");
+  if (bar)   bar.style.width = Math.round((filled / total) * 100) + "%";
+  if (label) label.textContent = `${filled} of ${total} filled`;
+}
+
+function countFilledVotes() {
+  return SUPERLATIVES.filter(sup => {
+    const vote = _votes[sup.id];
+    if (sup.type === "duo") return !!(vote?.nomineeName1 && vote?.nomineeName2);
+    return !!vote?.nomineeName;
+  }).length;
+}
+
+// ── Submit button ─────────────────────────────────────────────────────────────
+
+function updateSubmitButton() {
+  const btn = document.getElementById("submit-btn");
+  if (!btn) return;
+  const filled = countFilledVotes();
+  btn.disabled = filled === 0;
+  btn.textContent = filled === 0
+    ? "Fill in at least one category to submit"
+    : "Submit My Ballot";
+}
+
+// ── Submit flow ───────────────────────────────────────────────────────────────
+
+function openConfirmModal() {
+  const filled  = countFilledVotes();
+  const skipped = SUPERLATIVES.length - filled;
+  document.getElementById("modal-filled-count").textContent  = filled;
+  document.getElementById("modal-total-count").textContent   = SUPERLATIVES.length;
+  document.getElementById("modal-skipped-count").textContent = skipped;
+  document.getElementById("confirm-modal").classList.add("modal--open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeConfirmModal() {
+  document.getElementById("confirm-modal").classList.remove("modal--open");
+  document.body.style.overflow = "";
+}
+
+async function submitBallot() {
+  closeConfirmModal();
+
+  if (isVotingClosed()) {
+    showView("closed");
+    return;
+  }
+
+  const btn = document.getElementById("submit-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Submitting…"; }
+
+  // Build votes payload.
+  const votesPayload = [];
+  for (const sup of SUPERLATIVES) {
+    const vote = _votes[sup.id];
+    if (!vote) continue;
+
+    if (sup.type === "duo") {
+      if (vote.nomineeName1 && vote.nomineeName2) {
+        votesPayload.push({
+          categoryId:   sup.id,
+          nomineeName1: vote.nomineeName1,
+          nomineeName2: vote.nomineeName2,
+          isWriteIn:    !!vote.isWriteIn,
+        });
+      }
+    } else {
+      if (vote.nomineeName) {
+        votesPayload.push({
+          categoryId:  sup.id,
+          nomineeName: vote.nomineeName,
+          isWriteIn:   !!vote.isWriteIn,
+        });
+      }
+    }
+  }
+
+  try {
+    const res = await apiFetch({ action: "submit_ballot", votes: votesPayload });
+
+    if (!res.ok) {
+      showError(res.error || "Submission failed. Please try again.");
+      if (btn) { btn.disabled = false; btn.textContent = "Submit My Ballot"; }
+      return;
+    }
+
+    // Mark as submitted in localStorage — this is the duplicate-prevention gate.
+    localStorage.setItem(LS_SUBMITTED, "true");
+    // Clear the in-progress draft.
+    localStorage.removeItem(LS_DRAFT);
+
+    showView("confirmation");
+
+  } catch (err) {
+    console.error(err);
+    showError("Network error — please check your connection and try again.");
+    if (btn) { btn.disabled = false; btn.textContent = "Submit My Ballot"; }
+  }
+}
+
+function showError(msg) {
+  // Surface errors in the modal area since the landing error div is gone.
+  // Re-open the modal with an error message, or fall back to alert.
+  alert(msg);
+}
+
+// ── LocalStorage draft ────────────────────────────────────────────────────────
+
+function saveDraftToStorage() {
+  try { localStorage.setItem(LS_DRAFT, JSON.stringify(_votes)); } catch {}
+}
+
+function loadDraftFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_DRAFT);
+    if (raw) _votes = JSON.parse(raw);
+  } catch { _votes = {}; }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+async function apiFetch(body) {
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+function isVotingClosed() {
+  return Date.now() > VOTING_DEADLINE.getTime();
+}

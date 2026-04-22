@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2Y Send-Off Superlatives — Wharton Class of 2026</title>
+  <meta name="description" content="Vote for the Wharton MBA Class of 2026 send-off superlatives." />
+  <meta name="robots" content="noindex, nofollow" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ── Site header (visible during ballot) ── -->
+  <header class="site-header" id="site-header" style="display:none">
+    <div class="container">
+      <div class="site-header__wordmark">2Y Superlatives</div>
+      <div class="site-header__subtitle">Wharton Class of 2026</div>
+    </div>
+  </header>
+
+  <!-- ════════════════════════════════════════
+       VIEW: Landing
+       ════════════════════════════════════════ -->
+  <div class="view view--active" id="view-landing">
+    <div class="container">
+      <section class="hero">
+        <div class="hero__trophy" aria-hidden="true">🏆</div>
+        <h1 class="hero__title">2Y Send-Off Superlatives</h1>
+        <p class="hero__subtitle">Vote for the classmates who made the last two years what they were.</p>
+      </section>
+
+      <div class="deadline-pill">
+        <span class="deadline-pill__dot" aria-hidden="true"></span>
+        Closes April 30, 2026 at 11:59pm ET
+      </div>
+
+      <div class="instructions-card">
+        <p class="instructions-card__title">Before you vote</p>
+        <ul class="instructions-list">
+          <li>You'll vote across 33 categories.</li>
+          <li>Start typing a name and classmates will appear — tap to select.</li>
+          <li>Don't see someone? Type their full name and add them as a write-in.</li>
+          <li>You can vote for yourself. You can skip categories. Takes about 5–8 minutes.</li>
+          <li>One vote per person — please don't submit twice.</li>
+          <li>Closes April 30, 2026 at 11:59pm ET.</li>
+        </ul>
+      </div>
+
+      <section class="signin-section">
+        <button class="start-voting-btn" id="start-voting-btn">Start Voting</button>
+      </section>
+    </div>
+
+    <footer class="site-footer">
+      Built with love for the 2Y class of 2026. ✦
+    </footer>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       VIEW: Already voted
+       ════════════════════════════════════════ -->
+  <div class="view" id="view-already-voted">
+    <div class="container">
+      <div class="already-voted-card">
+        <div class="already-voted-card__emoji">✅</div>
+        <h2 class="already-voted-card__title">Already submitted!</h2>
+        <p class="already-voted-card__body">
+          Your ballot is in. Results will be revealed at the send-off — see you there!
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       VIEW: Closed
+       ════════════════════════════════════════ -->
+  <div class="view" id="view-closed">
+    <div class="container">
+      <div class="closed-card">
+        <div class="closed-card__emoji">🔒</div>
+        <h2 class="closed-card__title">Voting is closed.</h2>
+        <p class="closed-card__body">See you at the send-off.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       VIEW: Ballot
+       ════════════════════════════════════════ -->
+  <div class="view" id="view-ballot">
+
+    <!-- Progress bar (sticky below header) -->
+    <div class="progress-bar-wrap">
+      <div class="container">
+        <div class="progress-bar-inner">
+          <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="33" aria-valuenow="0">
+            <div class="progress-bar__fill" id="progress-bar-fill"></div>
+          </div>
+          <span class="progress-label" id="progress-label">0 of 33 filled</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ballot cards -->
+    <div class="container">
+      <div class="ballot-cards" id="ballot-cards">
+        <!-- Cards injected by app.js -->
+      </div>
+    </div>
+
+    <!-- Sticky submit button -->
+    <div class="sticky-submit">
+      <button class="submit-btn" id="submit-btn" disabled>
+        Fill in at least one category to submit
+      </button>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       VIEW: Confirmation
+       ════════════════════════════════════════ -->
+  <div class="view" id="view-confirmation">
+    <div class="container">
+      <div class="confirmation-card">
+        <div class="confirmation-card__emoji">🎉</div>
+        <h2 class="confirmation-card__title">Your ballot is in!</h2>
+        <p class="confirmation-card__body">
+          Thanks — results will be revealed at the send-off.
+        </p>
+        <p class="confirmation-card__tagline">Congratulations on two incredible years. 🎓</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       Confirm-submit Modal
+       ════════════════════════════════════════ -->
+  <div class="modal" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal__box">
+      <h2 class="modal__title" id="modal-title">Ready to submit?</h2>
+      <p class="modal__body">
+        You're submitting votes for <strong><span id="modal-filled-count">0</span> of <span id="modal-total-count">33</span></strong> categories.
+        <br />Skipped: <strong><span id="modal-skipped-count">0</span></strong>.
+        <br /><br />Once submitted, you can't change your vote.
+      </p>
+      <div class="modal__actions">
+        <button class="btn-secondary" id="cancel-submit-btn">Go back</button>
+        <button class="btn-primary"   id="confirm-submit-btn">Submit ballot</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Scripts ── -->
+  <script src="js/classmates.js"></script>
+  <script src="js/superlatives.js"></script>
+  <script src="js/autocomplete.js"></script>
+  <script src="js/app.js"></script>
+
+  <script>
+    // Show/hide the sticky site header when the ballot view is active.
+    document.addEventListener("DOMContentLoaded", () => {
+      const header = document.getElementById("site-header");
+      const observer = new MutationObserver(() => {
+        const ballotActive = document.getElementById("view-ballot")
+          ?.classList.contains("view--active");
+        if (header) header.style.display = ballotActive ? "block" : "none";
+      });
+      document.querySelectorAll(".view").forEach(v =>
+        observer.observe(v, { attributes: true, attributeFilter: ["class"] })
+      );
+    });
+  </script>
+</body>
+</html>
