@@ -259,14 +259,31 @@ async function exportCSV() {
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 async function apiFetch(body) {
-  // text/plain avoids CORS preflight that Apps Script can't handle.
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method:  "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body:    JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 20000);
+
+  let text = "";
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:  "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body:    JSON.stringify(body),
+      signal:  controller.signal,
+    });
+    clearTimeout(timeoutId);
+    text = await res.text();
+    console.log("[apiFetch] status:", res.status, "| body:", text.slice(0, 300));
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") throw new Error("Request timed out.");
+    throw err;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("Unexpected server response: " + text.slice(0, 150));
+  }
 }
 
 function setLoading(loading) {

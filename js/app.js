@@ -328,12 +328,17 @@ async function submitBallot() {
 }
 
 function showError(msg) {
+  console.error("[submitBallot error]", msg);
   const el = document.getElementById("submit-error");
-  if (!el) return;
-  el.textContent = msg;
-  el.style.display = "block";
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-  setTimeout(() => { el.style.display = "none"; }, 8000);
+  if (el) {
+    el.textContent = msg;
+    el.style.display = "block";
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => { el.style.display = "none"; }, 10000);
+  } else {
+    // Fallback if element isn't in DOM for any reason.
+    alert(msg);
+  }
 }
 
 // ── LocalStorage draft ────────────────────────────────────────────────────────
@@ -352,24 +357,32 @@ function loadDraftFromStorage() {
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 async function apiFetch(body) {
-  // Apps Script can't respond to CORS preflight (OPTIONS), which is triggered
-  // by Content-Type: application/json. Using text/plain avoids the preflight —
-  // it's a "simple request" so the browser sends it directly. Apps Script's
-  // e.postData.contents still receives the JSON string unchanged.
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method:   "POST",
-    headers:  { "Content-Type": "text/plain;charset=utf-8" },
-    body:     JSON.stringify(body),
-    redirect: "follow",
-  });
-  // Apps Script follows a redirect chain; parse the body regardless of status
-  // code so we surface the server's own error message when possible.
-  const text = await res.text();
+  // text/plain avoids CORS preflight (OPTIONS) that Apps Script can't handle.
+  // AbortController gives us a 20s timeout so the button never gets stuck.
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 20000);
+
+  let text = "";
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:  "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body:    JSON.stringify(body),
+      signal:  controller.signal,
+    });
+    clearTimeout(timeoutId);
+    text = await res.text();
+    console.log("[apiFetch] status:", res.status, "| body:", text.slice(0, 300));
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") throw new Error("Request timed out — please check your connection and try again.");
+    throw err;
+  }
+
   try {
     return JSON.parse(text);
   } catch {
-    console.error("Apps Script response (non-JSON):", res.status, text);
-    throw new Error("Unexpected response from server (status " + res.status + ")");
+    throw new Error("Unexpected server response: " + text.slice(0, 150));
   }
 }
 
